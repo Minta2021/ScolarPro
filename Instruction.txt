@@ -1,0 +1,74 @@
+Crée une application desktop avec Flutter et SQLite (via sqflite_common_ffi) pour la gestion des bulletins scolaires d'un établissement. L'application doit couvrir uniquement le périmètre suivant :
+
+## 1. Base de données SQLite
+
+Crée les tables suivantes :
+
+- etablissement (id, nom, adresse, telephone, logo_path, annee_scolaire) — une seule ligne, paramètres généraux de l'établissement (nom, logo, année scolaire en cours)
+
+- classes (id, nom, niveau)
+
+- cours (id, nom, coefficient, classe_id) — chaque cours est lié à une classe et possède un coefficient
+
+- eleves (id, nom, prenom, classe_id, matricule, date_naissance)
+
+- notes (id, eleve_id, cours_id, trimestre, note_classe, note_composition) — trimestre vaut 1, 2 ou 3 ; une ligne par cours et par trimestre pour chaque élève
+
+## 2. Écrans de l'application
+
+### Écran "Paramètres établissement"
+Formulaire à remplir une fois : nom de l'établissement, adresse, téléphone, logo (upload d'image), année scolaire. Ces informations seront réutilisées dans l'en-tête des bulletins PDF.
+
+### Écran "Liste des classes"
+Affiche toutes les classes créées sous forme de cartes/liste. Bouton "Créer une classe" en haut.
+
+### Écran "Création / édition de classe"
+Formulaire avec :
+- champ "Nom de la classe"
+- champ "Niveau"
+- une liste dynamique de cours : pour chaque cours, deux champs "Nom du cours" et "Coefficient", avec un bouton "+" pour ajouter une nouvelle ligne de cours et un bouton pour supprimer une ligne
+- bouton "Enregistrer"
+
+### Écran "Détail d'une classe"
+Affiche :
+- le nom de la classe et la liste des cours avec leurs coefficients
+- la liste des élèves de la classe (nom, prénom)
+- un bouton "Ajouter Élève" qui ouvre un formulaire simple (nom, prénom, matricule optionnel, date de naissance optionnelle)
+- pour chaque élève de la liste, deux boutons : "Ajouter note" et "Voir bulletin"
+
+### Écran "Saisie des notes" (ouvert via "Ajouter note")
+- un sélecteur de trimestre (1, 2 ou 3) en haut
+- la liste de tous les cours de la classe de l'élève, chaque cours affichant deux champs de saisie : "Note de classe" et "Note de composition" (notes sur 20)
+- pour chaque cours, calcule et affiche en temps réel la moyenne du cours selon la formule : moyenne_cours = (note_classe + note_composition × 2) / 3
+- en bas de l'écran, affiche en temps réel la moyenne générale selon la formule : moyenne_générale = somme(moyenne_cours × coefficient) / somme(coefficients)
+- bouton "Enregistrer les notes"
+
+### Écran "Bulletin" (ouvert via "Voir bulletin")
+- un sélecteur de trimestre
+- un tableau récapitulatif avec colonnes : Cours, Coefficient, Note de classe, Note de composition, Moyenne
+- en pied de tableau : la moyenne générale de l'élève et son rang dans la classe pour ce trimestre
+- bouton "Générer PDF"
+
+## 3. Logique de calcul du rang
+
+Pour un trimestre donné, calcule la moyenne_générale de tous les élèves de la classe, classe-les par ordre décroissant, et attribue le rang (1er, 2e, 3e, etc.) à chaque élève. Gère les cas d'égalité (élèves ex aequo doivent partager le même rang).
+
+## 4. Génération du bulletin PDF
+
+Utilise les packages "pdf" et "printing" pour générer un PDF contenant :
+- en-tête : logo de l'établissement, nom de l'établissement, adresse, année scolaire, trimestre
+- informations de l'élève : nom, prénom, classe, matricule
+- tableau des notes : Cours / Coefficient / Note de classe / Note de composition / Moyenne
+- pied de page : moyenne générale, rang sur effectif de la classe (ex: "5e sur 32"), zone de signature pour le directeur
+
+Le PDF doit pouvoir être exporté/sauvegardé ou directement imprimé via le package "printing".
+
+## 5. Architecture technique
+
+- Flutter desktop (Windows/Linux/macOS)
+- sqflite_common_ffi pour la base de données SQLite locale
+- path_provider pour localiser le fichier de base de données sur l'ordinateur
+- gestion d'état avec Provider ou Riverpod
+- structure de projet claire séparant : models (Classe, Cours, Eleve, Note, Etablissement), database (helper SQLite avec requêtes CRUD), screens (un fichier par écran décrit ci-dessus), widgets (composants réutilisables), services (calculs des moyennes et rangs, génération PDF)
+
+Génère d'abord la structure du projet et le script SQL de création des tables, puis implémente les écrans dans l'ordre suivant : Paramètres établissement → Liste/Création de classes → Détail de classe avec ajout d'élèves → Saisie des notes → Bulletin PDF.
