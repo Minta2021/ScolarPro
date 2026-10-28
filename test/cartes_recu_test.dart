@@ -44,6 +44,10 @@ void main() {
     expect(qr.contains('é'), isFalse);
   });
 
+  test('8 cartes par feuille A4 (2 colonnes × 4 lignes)', () {
+    expect(CarteScolaireService.cartesParPage, 8);
+  });
+
   test('planches A4 : 12 cartes recto-verso sans erreur de mise en page', () async {
     final bytes = await CarteScolaireService.genererPlanches(
       etablissement: etab,

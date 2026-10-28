@@ -18,7 +18,7 @@ Application de bureau (Flutter + SQLite) pour la gestion scolaire d'un établiss
   taux de recouvrement), journal des encaissements, listes imprimables, export Excel
 - **Paiement combiné** : inscription et scolarité encaissées ensemble sur un même reçu
 - **Cartes scolaires** : cartes au format carte bancaire (85,6 × 54 mm) avec photo et **QR code**,
-  10 par feuille A4 avec traits de coupe, verso en option, 6 couleurs au choix
+  8 par feuille A4 avec traits de coupe, verso en option, 6 couleurs au choix
 - **Sauvegarde / restauration** complète (base + logo + photos) dans un fichier .zip
 - Police Inter embarquée : affichage identique avec ou sans Internet
 

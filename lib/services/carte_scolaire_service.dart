@@ -56,7 +56,7 @@ class CarteScolaireService {
   static const double largeurMm = 85.6;
   static const double hauteurMm = 54;
   static const int colonnes = 2;
-  static const int lignes = 5;
+  static const int lignes = 4;
   static const int cartesParPage = colonnes * lignes;
 
   static double get _w => largeurMm * PdfPageFormat.mm;
@@ -363,7 +363,7 @@ class CarteScolaireService {
   // DOCUMENTS
   // ════════════════════════════════════════════════════════════════
 
-  /// Planches A4 prêtes à imprimer et découper : 10 cartes par page (2 × 5).
+  /// Planches A4 prêtes à imprimer et découper : 8 cartes par page (2 colonnes × 4 lignes).
   /// Avec le verso, chaque page recto est suivie de sa page verso, disposée en miroir
   /// pour une impression recto-verso (retournement sur le bord long).
   static Future<Uint8List> genererPlanches({
@@ -375,8 +375,9 @@ class CarteScolaireService {
     final doc = pw.Document(theme: await _pdfTheme(), title: 'Cartes scolaires $anneeScolaire');
     final logo = _image(etablissement.logoPath);
     final mm = PdfPageFormat.mm;
-    const ecartX = 4.0;
-    const ecartY = 3.0;
+    // Espacement généreux entre les cartes pour faciliter le découpage
+    const ecartX = 8.0;
+    const ecartY = 8.0;
     // 1 point de marge de sécurité pour les arrondis de calcul
     final margeX = (210 - (colonnes * largeurMm + (colonnes - 1) * ecartX)) / 2 * mm - 1;
     final margeY = (297 - (lignes * hauteurMm + (lignes - 1) * ecartY)) / 2 * mm - 1;
