@@ -53,14 +53,43 @@ class CarteEleve {
 class CarteScolaireService {
   CarteScolaireService._();
 
+  // ── Dimensions d'une carte : strictement identiques au recto et au verso ──
   static const double largeurMm = 85.6;
   static const double hauteurMm = 54;
+
+  // ── Planche A4 : 8 cartes au maximum (2 colonnes × 4 lignes) ──
+  static const double pageLargeurMm = 210;
+  static const double pageHauteurMm = 297;
   static const int colonnes = 2;
-  static const int lignes = 5;
+  static const int lignes = 4;
   static const int cartesParPage = colonnes * lignes;
+
+  /// Espace blanc entre deux cartes voisines (horizontalement et verticalement).
+  static const double ecartMm = 10;
+
+  /// Marges calculées pour que la grille soit exactement centrée sur la feuille.
+  /// C'est ce centrage qui garantit que le verso tombe pile derrière le recto.
+  static const double margeXMm = (pageLargeurMm - (colonnes * largeurMm + (colonnes - 1) * ecartMm)) / 2;
+  static const double margeYMm = (pageHauteurMm - (lignes * hauteurMm + (lignes - 1) * ecartMm)) / 2;
+
+  // Bandeaux communs aux deux faces
+  static const double _enteteMm = 13;
+  static const double _piedMm = 5.5;
 
   static double get _w => largeurMm * PdfPageFormat.mm;
   static double get _h => hauteurMm * PdfPageFormat.mm;
+
+  /// Position (en mm, depuis le coin haut-gauche de la feuille) de la case [index] d'une planche.
+  ///
+  /// Au verso, la position est le miroir horizontal exact de celle du recto : une fois la feuille
+  /// retournée sur le bord long, le verso de chaque carte se trouve juste derrière son recto.
+  static ({double x, double y}) positionCase(int index, {bool verso = false}) {
+    final ligne = index ~/ colonnes;
+    final colonne = index % colonnes;
+    final x = margeXMm + colonne * (largeurMm + ecartMm);
+    final y = margeYMm + ligne * (hauteurMm + ecartMm);
+    return (x: verso ? pageLargeurMm - x - largeurMm : x, y: y);
+  }
 
   static pw.ThemeData? _theme;
 
@@ -113,6 +142,96 @@ class CarteScolaireService {
   // DESSIN D'UNE CARTE
   // ════════════════════════════════════════════════════════════════
 
+  /// Cadre commun au recto et au verso : mêmes dimensions, même bordure, même bandeau
+  /// supérieur et même pied de carte. Seul le contenu change d'une face à l'autre.
+  static pw.Widget _cadre({
+    required PdfColor couleur,
+    required pw.Widget entete,
+    required pw.Widget corps,
+    required pw.Widget pied,
+  }) {
+    final mm = PdfPageFormat.mm;
+    return pw.Container(
+      width: _w,
+      height: _h,
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        border: pw.Border.all(color: PdfColors.grey500, width: 0.4),
+        borderRadius: pw.BorderRadius.circular(2.5 * mm),
+      ),
+      child: pw.ClipRRect(
+        horizontalRadius: 2.5 * mm,
+        verticalRadius: 2.5 * mm,
+        child: pw.Column(
+          children: [
+            // ── Bandeau supérieur ──
+            pw.Container(
+              height: _enteteMm * mm,
+              color: couleur,
+              padding: pw.EdgeInsets.symmetric(horizontal: 2.5 * mm, vertical: 1.6 * mm),
+              child: entete,
+            ),
+            // ── Corps ──
+            pw.Expanded(
+              child: pw.Padding(
+                padding: pw.EdgeInsets.fromLTRB(2.5 * mm, 2.2 * mm, 2.5 * mm, 1 * mm),
+                child: corps,
+              ),
+            ),
+            // ── Pied de carte ──
+            pw.Container(
+              height: _piedMm * mm,
+              padding: pw.EdgeInsets.symmetric(horizontal: 2.5 * mm),
+              decoration: pw.BoxDecoration(
+                border: pw.Border(top: pw.BorderSide(color: couleur, width: 0.8)),
+              ),
+              child: pied,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Logo et coordonnées de l'établissement (partie gauche du bandeau, identique sur les deux faces).
+  static List<pw.Widget> _enteteEtablissement(Etablissement etab, pw.ImageProvider? logo, PdfColor couleur) {
+    final mm = PdfPageFormat.mm;
+    const blanc = PdfColors.white;
+    return [
+      pw.Container(
+        width: 9.5 * mm,
+        height: 9.5 * mm,
+        padding: const pw.EdgeInsets.all(1.5),
+        decoration: pw.BoxDecoration(color: blanc, borderRadius: pw.BorderRadius.circular(1.5 * mm)),
+        child: logo != null
+            ? pw.Image(logo, fit: pw.BoxFit.contain)
+            : pw.Center(
+                child: pw.Text(etab.nom.isNotEmpty ? etab.nom[0].toUpperCase() : 'E',
+                    style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: couleur)),
+              ),
+      ),
+      pw.SizedBox(width: 2 * mm),
+      pw.Expanded(
+        child: pw.Column(
+          mainAxisAlignment: pw.MainAxisAlignment.center,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(etab.nom.toUpperCase(),
+                maxLines: 2, style: pw.TextStyle(fontSize: 6.8, fontWeight: pw.FontWeight.bold, color: blanc)),
+            if ((etab.adresse ?? '').isNotEmpty || (etab.telephone ?? '').isNotEmpty)
+              pw.Text(
+                [etab.adresse ?? '', if ((etab.telephone ?? '').isNotEmpty) 'Tél. ${etab.telephone}']
+                    .where((t) => t.isNotEmpty)
+                    .join(' · '),
+                maxLines: 1,
+                style: const pw.TextStyle(fontSize: 4.8, color: PdfColors.grey200),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+
   static pw.Widget _recto(
     CarteEleve c,
     Etablissement etab,
@@ -138,223 +257,158 @@ class CarteScolaireService {
           ),
         );
 
-    return pw.Container(
-      width: _w,
-      height: _h,
-      decoration: pw.BoxDecoration(
-        color: PdfColors.white,
-        border: pw.Border.all(color: PdfColors.grey500, width: 0.4),
-        borderRadius: pw.BorderRadius.circular(2.5 * mm),
+    return _cadre(
+      couleur: couleur,
+      entete: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          ..._enteteEtablissement(etab, logo, couleur),
+          pw.SizedBox(width: 1.5 * mm),
+          pw.Column(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Text('CARTE SCOLAIRE', style: pw.TextStyle(fontSize: 6.6, fontWeight: pw.FontWeight.bold, color: blanc)),
+              pw.SizedBox(height: 1),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: pw.BoxDecoration(color: blanc, borderRadius: pw.BorderRadius.circular(3)),
+                child: pw.Text(annee, style: pw.TextStyle(fontSize: 5.6, fontWeight: pw.FontWeight.bold, color: couleur)),
+              ),
+            ],
+          ),
+        ],
       ),
-      child: pw.ClipRRect(
-        horizontalRadius: 2.5 * mm,
-        verticalRadius: 2.5 * mm,
-        child: pw.Column(
-          children: [
-            // ── Bandeau supérieur ──
-            pw.Container(
-              height: 13 * mm,
-              color: couleur,
-              padding: pw.EdgeInsets.symmetric(horizontal: 2.5 * mm, vertical: 1.6 * mm),
-              child: pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                children: [
-                  pw.Container(
-                    width: 9.5 * mm,
-                    height: 9.5 * mm,
-                    padding: const pw.EdgeInsets.all(1.5),
-                    decoration: pw.BoxDecoration(color: blanc, borderRadius: pw.BorderRadius.circular(1.5 * mm)),
-                    child: logo != null
-                        ? pw.Image(logo, fit: pw.BoxFit.contain)
-                        : pw.Center(
-                            child: pw.Text(etab.nom.isNotEmpty ? etab.nom[0].toUpperCase() : 'E',
-                                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: couleur)),
-                          ),
-                  ),
-                  pw.SizedBox(width: 2 * mm),
-                  pw.Expanded(
-                    child: pw.Column(
-                      mainAxisAlignment: pw.MainAxisAlignment.center,
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(etab.nom.toUpperCase(),
-                            maxLines: 2,
-                            style: pw.TextStyle(fontSize: 6.8, fontWeight: pw.FontWeight.bold, color: blanc)),
-                        if ((etab.adresse ?? '').isNotEmpty || (etab.telephone ?? '').isNotEmpty)
-                          pw.Text(
-                            [etab.adresse ?? '', if ((etab.telephone ?? '').isNotEmpty) 'Tél. ${etab.telephone}']
-                                .where((t) => t.isNotEmpty)
-                                .join(' · '),
-                            maxLines: 1,
-                            style: const pw.TextStyle(fontSize: 4.8, color: PdfColors.grey200),
-                          ),
-                      ],
-                    ),
-                  ),
-                  pw.SizedBox(width: 1.5 * mm),
-                  pw.Column(
-                    mainAxisAlignment: pw.MainAxisAlignment.center,
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text('CARTE SCOLAIRE',
-                          style: pw.TextStyle(fontSize: 6.6, fontWeight: pw.FontWeight.bold, color: blanc)),
-                      pw.SizedBox(height: 1),
-                      pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                        decoration: pw.BoxDecoration(color: blanc, borderRadius: pw.BorderRadius.circular(3)),
-                        child: pw.Text(annee,
-                            style: pw.TextStyle(fontSize: 5.6, fontWeight: pw.FontWeight.bold, color: couleur)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+      corps: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          // Photo
+          pw.Container(
+            width: 19 * mm,
+            height: 24 * mm,
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              border: pw.Border.all(color: couleur, width: 0.8),
+              borderRadius: pw.BorderRadius.circular(1.2 * mm),
             ),
-
-            // ── Corps ──
-            pw.Expanded(
-              child: pw.Padding(
-                padding: pw.EdgeInsets.fromLTRB(2.5 * mm, 2.2 * mm, 2.5 * mm, 1 * mm),
-                child: pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    // Photo
-                    pw.Container(
-                      width: 19 * mm,
-                      height: 24 * mm,
-                      decoration: pw.BoxDecoration(
-                        color: PdfColors.grey100,
-                        border: pw.Border.all(color: couleur, width: 0.8),
-                        borderRadius: pw.BorderRadius.circular(1.2 * mm),
-                      ),
-                      child: photo != null
-                          ? pw.ClipRRect(
-                              horizontalRadius: 1.2 * mm,
-                              verticalRadius: 1.2 * mm,
-                              child: pw.Image(photo, fit: pw.BoxFit.cover, width: 19 * mm, height: 24 * mm),
-                            )
-                          : pw.Center(
-                              child: pw.Text(initiales.toUpperCase(),
-                                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: couleur)),
-                            ),
-                    ),
-                    pw.SizedBox(width: 2.5 * mm),
-                    // Identité
-                    pw.Expanded(
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(e.nom.toUpperCase(),
-                              maxLines: 1, style: pw.TextStyle(fontSize: 8.6, fontWeight: pw.FontWeight.bold)),
-                          pw.Text(e.prenom,
-                              maxLines: 1, style: const pw.TextStyle(fontSize: 7.4, color: PdfColors.grey900)),
-                          pw.SizedBox(height: 1.6 * mm),
-                          ligneInfo('Classe', c.classeNom),
-                          ligneInfo('Matricule', (e.matricule ?? '').isEmpty ? '—' : e.matricule!),
-                          if ((e.dateNaissance ?? '').isNotEmpty) ligneInfo('Né(e) le', e.dateNaissance!),
-                          if ((e.telephoneParent ?? '').isNotEmpty) ligneInfo('Tél. parent', e.telephoneParent!),
-                        ],
-                      ),
-                    ),
-                    pw.SizedBox(width: 1.5 * mm),
-                    // QR code
-                    pw.Column(
-                      children: [
-                        pw.BarcodeWidget(
-                          barcode: pw.Barcode.qrCode(),
-                          data: donneesQr(c, etab, annee),
-                          width: 19 * mm,
-                          height: 19 * mm,
-                          drawText: false,
-                        ),
-                        pw.SizedBox(height: 0.8 * mm),
-                        pw.Text(reference(c, annee), style: const pw.TextStyle(fontSize: 4.6, color: PdfColors.grey700)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+            child: photo != null
+                ? pw.ClipRRect(
+                    horizontalRadius: 1.2 * mm,
+                    verticalRadius: 1.2 * mm,
+                    child: pw.Image(photo, fit: pw.BoxFit.cover, width: 19 * mm, height: 24 * mm),
+                  )
+                : pw.Center(
+                    child: pw.Text(initiales.toUpperCase(),
+                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: couleur)),
+                  ),
+          ),
+          pw.SizedBox(width: 2.5 * mm),
+          // Identité
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(e.nom.toUpperCase(), maxLines: 1, style: pw.TextStyle(fontSize: 8.6, fontWeight: pw.FontWeight.bold)),
+                pw.Text(e.prenom, maxLines: 1, style: const pw.TextStyle(fontSize: 7.4, color: PdfColors.grey900)),
+                pw.SizedBox(height: 1.6 * mm),
+                ligneInfo('Classe', c.classeNom),
+                ligneInfo('Matricule', (e.matricule ?? '').isEmpty ? '—' : e.matricule!),
+                if ((e.dateNaissance ?? '').isNotEmpty) ligneInfo('Né(e) le', e.dateNaissance!),
+                if ((e.telephoneParent ?? '').isNotEmpty) ligneInfo('Tél. parent', e.telephoneParent!),
+              ],
             ),
-
-            // ── Pied de carte ──
-            pw.Container(
-              height: 5.5 * mm,
-              padding: pw.EdgeInsets.symmetric(horizontal: 2.5 * mm),
-              decoration: pw.BoxDecoration(
-                border: pw.Border(top: pw.BorderSide(color: couleur, width: 0.8)),
+          ),
+          pw.SizedBox(width: 1.5 * mm),
+          // QR code
+          pw.Column(
+            children: [
+              pw.BarcodeWidget(
+                barcode: pw.Barcode.qrCode(),
+                data: donneesQr(c, etab, annee),
+                width: 19 * mm,
+                height: 19 * mm,
+                drawText: false,
               ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Valable pour l\'année scolaire $annee',
-                      style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700)),
-                  pw.Text('${o.signataire} : ..................',
-                      style: pw.TextStyle(fontSize: 5.2, fontWeight: pw.FontWeight.bold, color: couleur)),
-                ],
-              ),
-            ),
-          ],
-        ),
+              pw.SizedBox(height: 0.8 * mm),
+              pw.Text(reference(c, annee), style: const pw.TextStyle(fontSize: 4.6, color: PdfColors.grey700)),
+            ],
+          ),
+        ],
+      ),
+      pied: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text('Valable pour l\'année scolaire $annee', style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700)),
+          pw.Text('${o.signataire} : ..................',
+              style: pw.TextStyle(fontSize: 5.2, fontWeight: pw.FontWeight.bold, color: couleur)),
+        ],
       ),
     );
   }
 
-  static pw.Widget _verso(CarteEleve c, Etablissement etab, String annee, OptionsCarte o) {
+  static pw.Widget _verso(
+    CarteEleve c,
+    Etablissement etab,
+    String annee,
+    OptionsCarte o,
+    pw.ImageProvider? logo,
+  ) {
     final mm = PdfPageFormat.mm;
     final couleur = o.couleur.pdf;
-    return pw.Container(
-      width: _w,
-      height: _h,
-      decoration: pw.BoxDecoration(
-        color: PdfColors.white,
-        border: pw.Border.all(color: PdfColors.grey500, width: 0.4),
-        borderRadius: pw.BorderRadius.circular(2.5 * mm),
+    final telParent = c.eleve.telephoneParent ?? '';
+
+    return _cadre(
+      couleur: couleur,
+      entete: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: _enteteEtablissement(etab, logo, couleur),
       ),
-      child: pw.ClipRRect(
-        horizontalRadius: 2.5 * mm,
-        verticalRadius: 2.5 * mm,
-        child: pw.Column(
-          children: [
-            pw.Container(
-              height: 7 * mm,
-              color: couleur,
-              alignment: pw.Alignment.center,
-              child: pw.Text(etab.nom.toUpperCase(),
-                  maxLines: 1, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+      corps: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Text('Cette carte est strictement personnelle.',
+              style: pw.TextStyle(fontSize: 6.6, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 0.8 * mm),
+          pw.Text(
+            "Elle doit être présentée à toute demande du personnel de l'établissement "
+            "et reste valable uniquement pour l'année scolaire $annee.",
+            style: const pw.TextStyle(fontSize: 5.8),
+          ),
+          pw.Spacer(),
+          pw.Container(
+            padding: pw.EdgeInsets.fromLTRB(2 * mm, 1.2 * mm, 2 * mm, 1.2 * mm),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              border: pw.Border(left: pw.BorderSide(color: couleur, width: 2)),
             ),
-            pw.Expanded(
-              child: pw.Padding(
-                padding: pw.EdgeInsets.all(3 * mm),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text('Cette carte est strictement personnelle.',
-                        style: pw.TextStyle(fontSize: 6.4, fontWeight: pw.FontWeight.bold)),
-                    pw.SizedBox(height: 1 * mm),
-                    pw.Text(
-                      "Elle doit être présentée à toute demande du personnel de l'établissement "
-                      "et reste valable uniquement pour l'année scolaire $annee.",
-                      style: const pw.TextStyle(fontSize: 5.6),
-                    ),
-                    pw.SizedBox(height: 2 * mm),
-                    pw.Text('En cas de perte, merci de la rapporter à :',
-                        style: const pw.TextStyle(fontSize: 5.6, color: PdfColors.grey800)),
-                    pw.SizedBox(height: 0.8 * mm),
-                    pw.Text(etab.nom, style: pw.TextStyle(fontSize: 6.4, fontWeight: pw.FontWeight.bold, color: couleur)),
-                    if ((etab.adresse ?? '').isNotEmpty) pw.Text(etab.adresse!, style: const pw.TextStyle(fontSize: 5.6)),
-                    if ((etab.telephone ?? '').isNotEmpty)
-                      pw.Text('Tél. : ${etab.telephone}', style: const pw.TextStyle(fontSize: 5.6)),
-                    pw.Spacer(),
-                    if ((c.eleve.telephoneParent ?? '').isNotEmpty)
-                      pw.Text('Contact du parent : ${c.eleve.telephoneParent}',
-                          style: pw.TextStyle(fontSize: 5.8, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('Réf. ${reference(c, annee)}', style: const pw.TextStyle(fontSize: 4.8, color: PdfColors.grey600)),
-                  ],
-                ),
-              ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('En cas de perte, merci de la rapporter à :',
+                    style: const pw.TextStyle(fontSize: 5.6, color: PdfColors.grey800)),
+                pw.SizedBox(height: 0.6 * mm),
+                pw.Text(etab.nom,
+                    maxLines: 2, style: pw.TextStyle(fontSize: 6.4, fontWeight: pw.FontWeight.bold, color: couleur)),
+                if ((etab.adresse ?? '').isNotEmpty)
+                  pw.Text(etab.adresse!, maxLines: 1, style: const pw.TextStyle(fontSize: 5.6)),
+                if ((etab.telephone ?? '').isNotEmpty)
+                  pw.Text('Tél. : ${etab.telephone}', style: const pw.TextStyle(fontSize: 5.6)),
+              ],
             ),
-          ],
-        ),
+          ),
+          pw.SizedBox(height: 1 * mm),
+        ],
+      ),
+      pied: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            telParent.isNotEmpty ? 'Contact du parent : $telParent' : 'Valable pour l\'année scolaire $annee',
+            style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey700),
+          ),
+          pw.Text('Réf. ${reference(c, annee)}',
+              style: pw.TextStyle(fontSize: 5.2, fontWeight: pw.FontWeight.bold, color: couleur)),
+        ],
       ),
     );
   }
@@ -363,9 +417,44 @@ class CarteScolaireService {
   // DOCUMENTS
   // ════════════════════════════════════════════════════════════════
 
-  /// Planches A4 prêtes à imprimer et découper : 10 cartes par page (2 × 5).
-  /// Avec le verso, chaque page recto est suivie de sa page verso, disposée en miroir
-  /// pour une impression recto-verso (retournement sur le bord long).
+  /// Traits de coupe dans les marges, dans le prolongement des bords de chaque carte.
+  /// La grille étant centrée, ils sont au même endroit au recto et au verso.
+  static List<pw.Widget> _traitsDeCoupe() {
+    final mm = PdfPageFormat.mm;
+    const longueurMm = 5.0;
+    const retraitMm = 2.0; // espace laissé entre le trait et la carte
+    const epaisseur = 0.35; // en points
+    const couleur = PdfColors.grey600;
+
+    pw.Widget trait({required double x, required double y, required double largeur, required double hauteur}) =>
+        pw.Positioned(left: x, top: y, child: pw.Container(width: largeur, height: hauteur, color: couleur));
+
+    final traits = <pw.Widget>[];
+    // Traits verticaux, en haut et en bas de la feuille
+    for (var col = 0; col < colonnes; col++) {
+      final gauche = positionCase(col).x;
+      for (final x in [gauche, gauche + largeurMm]) {
+        for (final y in [margeYMm - retraitMm - longueurMm, pageHauteurMm - margeYMm + retraitMm]) {
+          traits.add(trait(x: x * mm - epaisseur / 2, y: y * mm, largeur: epaisseur, hauteur: longueurMm * mm));
+        }
+      }
+    }
+    // Traits horizontaux, à gauche et à droite de la feuille
+    for (var ligne = 0; ligne < lignes; ligne++) {
+      final haut = positionCase(ligne * colonnes).y;
+      for (final y in [haut, haut + hauteurMm]) {
+        for (final x in [margeXMm - retraitMm - longueurMm, pageLargeurMm - margeXMm + retraitMm]) {
+          traits.add(trait(x: x * mm, y: y * mm - epaisseur / 2, largeur: longueurMm * mm, hauteur: epaisseur));
+        }
+      }
+    }
+    return traits;
+  }
+
+  /// Planches A4 prêtes à imprimer et découper : 8 cartes au maximum par page (2 × 4),
+  /// grille centrée au millimètre, traits de coupe dans les marges.
+  /// Avec le verso, chaque page recto est suivie de sa page verso, où chaque carte est placée
+  /// au miroir exact de son recto (impression recto-verso, retournement sur le bord long).
   static Future<Uint8List> genererPlanches({
     required Etablissement etablissement,
     required String anneeScolaire,
@@ -375,51 +464,33 @@ class CarteScolaireService {
     final doc = pw.Document(theme: await _pdfTheme(), title: 'Cartes scolaires $anneeScolaire');
     final logo = _image(etablissement.logoPath);
     final mm = PdfPageFormat.mm;
-    const ecartX = 4.0;
-    const ecartY = 3.0;
-    // 1 point de marge de sécurité pour les arrondis de calcul
-    final margeX = (210 - (colonnes * largeurMm + (colonnes - 1) * ecartX)) / 2 * mm - 1;
-    final margeY = (297 - (lignes * hauteurMm + (lignes - 1) * ecartY)) / 2 * mm - 1;
 
-    pw.Widget planche(List<pw.Widget?> cases) {
-      return pw.Column(
-        children: [
-          for (var r = 0; r < lignes; r++) ...[
-            if (r > 0) pw.SizedBox(height: ecartY * mm),
-            pw.Row(
-              children: [
-                for (var col = 0; col < colonnes; col++) ...[
-                  if (col > 0) pw.SizedBox(width: ecartX * mm),
-                  cases[r * colonnes + col] ?? pw.SizedBox(width: _w, height: _h),
-                ],
-              ],
-            ),
-          ],
-        ],
-      );
-    }
+    pw.Page planche(List<pw.Widget> faces, {required bool verso}) => pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.zero,
+          build: (_) => pw.Stack(
+            children: [
+              ..._traitsDeCoupe(),
+              for (var i = 0; i < faces.length; i++)
+                pw.Positioned(
+                  left: positionCase(i, verso: verso).x * mm,
+                  top: positionCase(i, verso: verso).y * mm,
+                  child: faces[i],
+                ),
+            ],
+          ),
+        );
 
     for (var debut = 0; debut < cartes.length; debut += cartesParPage) {
       final groupe = cartes.skip(debut).take(cartesParPage).toList();
-      final recto = List<pw.Widget?>.filled(cartesParPage, null);
-      final verso = List<pw.Widget?>.filled(cartesParPage, null);
-      for (var i = 0; i < groupe.length; i++) {
-        recto[i] = _recto(groupe[i], etablissement, anneeScolaire, options, logo);
-        // Miroir horizontal : la carte de gauche au recto se retrouve à droite au verso
-        final r = i ~/ colonnes;
-        final col = i % colonnes;
-        verso[r * colonnes + (colonnes - 1 - col)] = _verso(groupe[i], etablissement, anneeScolaire, options);
-      }
-      doc.addPage(pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: pw.EdgeInsets.symmetric(horizontal: margeX, vertical: margeY),
-        build: (_) => planche(recto),
+      doc.addPage(planche(
+        [for (final c in groupe) _recto(c, etablissement, anneeScolaire, options, logo)],
+        verso: false,
       ));
       if (options.verso) {
-        doc.addPage(pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: pw.EdgeInsets.symmetric(horizontal: margeX, vertical: margeY),
-          build: (_) => planche(verso),
+        doc.addPage(planche(
+          [for (final c in groupe) _verso(c, etablissement, anneeScolaire, options, logo)],
+          verso: true,
         ));
       }
     }
@@ -440,7 +511,7 @@ class CarteScolaireService {
       pageFormat: PdfPageFormat(_w, _h),
       margin: pw.EdgeInsets.zero,
       build: (_) => verso
-          ? _verso(carte, etablissement, anneeScolaire, options)
+          ? _verso(carte, etablissement, anneeScolaire, options, logo)
           : _recto(carte, etablissement, anneeScolaire, options, logo),
     ));
     return doc.save();

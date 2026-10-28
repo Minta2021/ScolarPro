@@ -337,8 +337,9 @@ class _CartesScolairesScreenState extends State<CartesScolairesScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    "Format carte bancaire (85,6 × 54 mm) — 10 cartes par feuille A4, traits de coupe inclus."
-                    "${_verso ? ' Verso sur la page suivante (recto-verso, bord long).' : ''}",
+                    "Format carte bancaire (85,6 × 54 mm) — ${CarteScolaireService.cartesParPage} cartes par feuille A4, "
+                    "traits de coupe inclus."
+                    "${_verso ? ' Verso sur la page suivante, aligné derrière chaque recto (recto-verso, retournement sur le bord long).' : ''}",
                     style: const TextStyle(color: AppTheme.textLight, fontSize: 12),
                   ),
                 ),
