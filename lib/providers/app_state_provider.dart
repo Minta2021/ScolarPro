@@ -572,6 +572,44 @@ class AppStateProvider extends ChangeNotifier {
     return maps.map((m) => Note.fromMap(m)).toList();
   }
 
+  /// Notes de tous les élèves pour une matière et un trimestre (clé : identifiant de l'élève).
+  Future<Map<int, Note>> getNotesCours(int coursId, int trimestre) async {
+    final db = await DBHelper.database;
+    final rows = await db.query(
+      'notes',
+      where: 'cours_id = ? AND trimestre = ?',
+      whereArgs: [coursId, trimestre],
+    );
+    return {for (final r in rows) r['eleve_id'] as int: Note.fromMap(r)};
+  }
+
+  /// Enregistre en une fois les notes d'une matière pour plusieurs élèves (saisie par classe).
+  /// Une ligne dont les deux notes sont vides est supprimée.
+  Future<void> saveNotesCours(int classId, List<Note> notes) async {
+    if (notes.isEmpty) return;
+    final db = await DBHelper.database;
+    await db.transaction((txn) async {
+      for (final n in notes) {
+        if (n.noteClasse == null && n.noteComposition == null) {
+          await txn.delete(
+            'notes',
+            where: 'eleve_id = ? AND cours_id = ? AND trimestre = ?',
+            whereArgs: [n.eleveId, n.coursId, n.trimestre],
+          );
+        } else {
+          await txn.rawInsert('''
+            INSERT INTO notes (eleve_id, cours_id, trimestre, note_classe, note_composition)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(eleve_id, cours_id, trimestre)
+            DO UPDATE SET note_classe = excluded.note_classe, note_composition = excluded.note_composition
+          ''', [n.eleveId, n.coursId, n.trimestre, n.noteClasse, n.noteComposition]);
+        }
+      }
+    });
+    _invalidateMoyennes();
+    await loadClassDetails(classId);
+  }
+
   Future<void> saveNotes(int eleveId, int classId, int trimestre, List<Note> notesList) async {
     final db = await DBHelper.database;
     

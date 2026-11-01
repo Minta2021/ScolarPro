@@ -13,6 +13,7 @@ import '../services/pdf_service.dart';
 import 'notes_entry_screen.dart';
 import 'bulletin_screen.dart';
 import 'import_eleves_screen.dart';
+import 'saisie_notes_classe_screen.dart';
 
 class ClassDetailScreen extends StatefulWidget {
   final int classId;
@@ -543,6 +544,22 @@ class _ClassDetailScreenState extends State<ClassDetailScreen> {
     );
   }
 
+  /// Saisie des notes de toute la classe pour une matière (tableau élèves × notes).
+  Future<void> _ouvrirSaisieParMatiere({int? coursId}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SaisieNotesClasseScreen(
+          classId: widget.classId,
+          className: widget.className,
+          coursInitialId: coursId,
+          trimestreInitial: _selectedTrimestre,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    context.read<AppStateProvider>().loadClassDetails(widget.classId, trimestre: _selectedTrimestre);
+  }
+
   Future<void> _generateAllBulletins(List<Eleve> eleves, List<Cours> courses) async {
     final eligible = eleves.where((e) => e.notesCount == courses.length).toList();
     if (eligible.isEmpty) {
@@ -690,13 +707,19 @@ class _ClassDetailScreenState extends State<ClassDetailScreen> {
                           itemCount: courses.length,
                           itemBuilder: (context, index) {
                             final course = courses[index];
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              decoration: BoxDecoration(
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Material(
                                 color: AppTheme.surfaceAlt,
                                 borderRadius: BorderRadius.circular(10),
-                              ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: eleves.isEmpty ? null : () => _ouvrirSaisieParMatiere(coursId: course.id),
+                                  child: Tooltip(
+                                    message: "Saisir les notes de « ${course.nom} » pour toute la classe",
+                                    waitDuration: const Duration(milliseconds: 600),
+                                    child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                               child: Row(
                                 children: [
                                   Container(
@@ -741,7 +764,13 @@ class _ClassDetailScreenState extends State<ClassDetailScreen> {
                                       ),
                                     ),
                                   ),
+                                  const SizedBox(width: 6),
+                                  const Icon(Icons.edit_note_rounded, size: 18, color: AppTheme.primary),
                                 ],
+                              ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             );
                           },
@@ -818,6 +847,17 @@ class _ClassDetailScreenState extends State<ClassDetailScreen> {
                                   _buildTrimestreBtn(3, "T3"),
                                 ],
                               ),
+                              Row(
+                                children: [
+                              ElevatedButton.icon(
+                                onPressed: (eleves.isEmpty || courses.isEmpty) ? null : () => _ouvrirSaisieParMatiere(),
+                                icon: const Icon(Icons.grid_on_rounded, size: 16),
+                                label: const Text("Saisir les notes par matière"),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
                               OutlinedButton.icon(
                                 onPressed: eleves.isEmpty ? null : () => _generateAllBulletins(eleves, courses),
                                 icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
@@ -827,6 +867,8 @@ class _ClassDetailScreenState extends State<ClassDetailScreen> {
                                   side: const BorderSide(color: AppTheme.primary, width: 1.5),
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                                 ),
+                              ),
+                                ],
                               ),
                             ],
                           ),

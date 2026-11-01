@@ -10,7 +10,8 @@ Application de bureau (Flutter + SQLite) pour la gestion scolaire d'un établiss
   - toute l'école en une fois : colonne « Classe » ou une feuille par classe
   - colonnes reconnues automatiquement (et modifiables), nom complet dans une seule colonne
   - création automatique des classes manquantes, détection des doublons, aperçu avant import
-- Saisie des notes par trimestre
+- Saisie des notes par trimestre : élève par élève, ou **par classe et par matière** (tableau de tous les élèves,
+  moyennes et statistiques en direct, navigation au clavier, Ctrl+S pour enregistrer)
 - Bulletins avec moyenne, mention et rang (gestion des ex aequo), export PDF / impression
 - Statistiques, export Excel, passage de classe en fin d'année
 - **Comptabilité** : encaissements (inscription / scolarité), remises, reçus PDF numérotés
